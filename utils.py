@@ -5,7 +5,7 @@ Basic functions for Quantum Information Processing
 
 import pylab as py
 import qutip as qp
-import itertools
+import itertools,os,sys
 
 _pauliBasis = {}
 _pauliBasis[1] = {}
@@ -101,9 +101,14 @@ def getTraceDistance(operatorA,operatorB):
 
 
 
+def test(message=None):
+	s = 'ff ' + ('' if message is None else str(message))
+	return s
 
-
-
+def gitcommit(message=None):
+	os.system('git add *')
+	os.system('git commit -m "' + ('' if message is None else str(message)) + '"')
+	os.system('git push origin master')
 
 
 

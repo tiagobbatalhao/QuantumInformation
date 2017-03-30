@@ -5,13 +5,14 @@ Basic functions for Quantum Information Processing
 
 import pylab as py
 import qutip as qp
+import itertools
 
-pauliBasis = {}
-pauliBasis[1] = {}
-pauliBasis[1]['I'] = qp.qeye(2)
-pauliBasis[1]['X'] = qp.sigmax()
-pauliBasis[1]['Y'] = qp.sigmay()
-pauliBasis[1]['Z'] = qp.sigmaz()
+_pauliBasis = {}
+_pauliBasis[1] = {}
+_pauliBasis[1]['I'] = qp.qeye(2)
+_pauliBasis[1]['X'] = qp.sigmax()
+_pauliBasis[1]['Y'] = qp.sigmay()
+_pauliBasis[1]['Z'] = qp.sigmaz()
 
 def isSystemOfQubits(operator):
 	"""
@@ -27,12 +28,12 @@ def isSystemOfQubits(operator):
 
 def getPauliBasis(nQubits):
 	"""
-	generate a Pauli basis for more than one qubit
+	Generate a Pauli basis for more than one qubit
 	"""
 	for i in range(1,nQubits+1):
-		if i not in pauliBasis.keys():
-			pauliBasis[i] = combineBasis(pauliBasis[i-1],pauliBasis[1])
-	return {x:y for x,y in pauliBasis[nQubits].items()}
+		if i not in _pauliBasis.keys():
+			_pauliBasis[i] = combineBasis(_pauliBasis[i-1],_pauliBasis[1])
+	return {x:y for x,y in _pauliBasis[nQubits].items()}
 
 def combineBasis(dicBasisA,dicBasisB):
 	"""
@@ -48,7 +49,7 @@ def combineBasis(dicBasisA,dicBasisB):
 
 def getBlochForm(operator,arrayForm=False,realPartOnly=False):
 	"""
-	Get a representation in terms of a Bloch vector
+	Get a representation of an operator in terms of a Bloch vector
 	"""
 	if not isSystemOfQubits(operator):
 		raise ValueError('Operator must be defined on a collection of qubits')
@@ -70,16 +71,32 @@ def getBlochForm(operator,arrayForm=False,realPartOnly=False):
 		array = [bloch[x] for x in keys]
 		return array
 
+def getOperatorForm(bloch):
+	"""
+	Get an operator from its Bloch vector representation
+	"""
+	threshold = 1e-12
+	log = py.log(len(bloch)) / py.log(4)
+	if abs(log - round(log)) > threshold:
+		raise ValueError('Input must have length equal to a power of 4')
+	nQubits = int(round(log))
+	if type(bloch) == type([]):
+		labels = [''.join(x) for x in itertools.product(['I','X','Y','Z'],repeat=nQubits)]
+		values = bloch
+	elif type(bloch) == type({}):
+		labels = [x for x,y in bloch.items()]
+		values = [y for x,y in bloch.items()]
+	basis = getPauliBasis(nQubits)
+	operator = 0 * basis[labels[0]]
+	for lab,val in zip(labels,values):
+		operator += val * basis[lab]
+	return operator
 
-
-
-
-
-
-
-
-
-
+def getTraceDistance(operatorA,operatorB):
+	"""
+	Get the trace distance between operators
+	"""
+	return qp.tracedist(operatorA,operatorB)
 
 
 

@@ -105,3 +105,4 @@ def gitcommit(message=None):
 	os.system('git commit -m "' + ('' if message is None else str(message)) + '"')
 	os.system('git push origin master')
 
+print 'One more test'

@@ -100,21 +100,8 @@ def getTraceDistance(operatorA,operatorB):
 
 
 
-
-def test(message=None):
-	s = 'ff ' + ('' if message is None else str(message))
-	return s
-
 def gitcommit(message=None):
-	os.system('git add *')
+	os.system('git add ' + __file__)
 	os.system('git commit -m "' + ('' if message is None else str(message)) + '"')
 	os.system('git push origin master')
-
-
-
-
-
-
-
-
 

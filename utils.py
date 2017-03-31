@@ -51,9 +51,7 @@ def getBlochForm(operator,arrayForm=False,realPartOnly=False):
 	"""
 	Get a representation of an operator in terms of a Bloch vector
 	"""
-	if not isSystemOfQubits(operator):
-		raise ValueError('Operator must be defined on a collection of qubits')
-	nQubits = len(operator.dims[0])
+	nQubits = getNumberOfQubits(operator)
 	basis = getPauliBasis(nQubits)
 	bloch = {}
 	normalization = 2**(-nQubits)
@@ -92,12 +90,38 @@ def getOperatorForm(bloch):
 		operator += val * basis[lab]
 	return operator
 
-def getTraceDistance(operatorA,operatorB):
+def getTraceDistance(operatorA,operatorB,unitaryPhaseCorrection=False):
 	"""
 	Get the trace distance between operators
 	"""
-	return qp.tracedist(operatorA,operatorB)
+	if unitaryPhaseCorrection:
+		return qp.tracedist(getUnitaryToNormalForm(operatorA),getUnitaryToNormalForm(operatorB))
+	else:
+		return qp.tracedist(operatorA,operatorB)
 
+def getNumberOfQubits(operator):
+	"""
+	Return the number of qubits in the Hilbert space where the operator is defined
+	"""
+	if not isSystemOfQubits(operator):
+		raise ValueError('Operator must be defined on a collection of qubits')
+	nQubits = len(operator.dims[0])
+	return nQubits
+
+
+def getUnitaryToNormalForm(unitary):
+	"""
+	Multiply an unitary by a phase factor so that it has real trace.
+	If trace is zero, consider the Pauli expansion.
+	"""
+	threshold = 1e-12
+	nQubits = getNumberOfQubits(unitary)
+	for lab,op in getPauliBasis(nQubits):
+		trace = (op * unitary).tr()
+		if abs(trace) > threshold:
+			phase = cmath.phase(trace)
+			break
+	return py.exp(-1j*phase) * unitary
 
 
 def gitcommit(message=None):

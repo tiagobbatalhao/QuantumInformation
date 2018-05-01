@@ -2,7 +2,7 @@
 Author: Tiago Batalhão
 
 This file contains code to implement a 2-qubit unitary operator
-according to the method of PRA 63, 062309:
+according to the method of PRA 63, 062309.
 """
 
 import pylab as py
@@ -18,18 +18,36 @@ class TwoQubitOperation():
     It uses the qutip package.
     """
 
+    def __init__(self, unitary=None):
+        if unitary is not None:
+            self.unitary = unitary
+
     @property
     def unitary(self):
         return self.__unitary
-
     @unitary.setter
     def unitary(self, unitary):
         if isinstance(unitary, list) or isinstance(unitary, tuple):
             unitary = py.array(unitary)
         if hasattr(unitary, 'shape') and unitary.shape == (4,4):
             self.__unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
+            self.decomposition_Cirac()
         else:
-            raise ValueError(u"Property 'unitary' must be 4x4 matrix.")
+            raise Exception("Property 'unitary' must be 4x4 matrix.")
+
+    @property
+    def Cirac_unitaries(self):
+        return self.__Cirac_unitaries
+    @Cirac_unitaries.setter
+    def Cirac_unitaries(self, value):
+        raise Exception("You can not assign to this property.")
+
+    @property
+    def Cirac_parameters(self):
+        return self.__Cirac_parameters
+    @Cirac_parameters.setter
+    def Cirac_parameters(self, value):
+        raise Exception("You can not assign to this property.")
 
     def decomposition_Cirac(self):
         """
@@ -50,16 +68,16 @@ class TwoQubitOperation():
         Udiag = qp.tensor([Uad,Ubd]) * self.unitary * qp.tensor([Va,Vb]).dag()
         two_qubit_params = list(get_alphabetagamma(Udiag))
 
-        self._Cirac_unitaries = tuple([Vb,Va,Ub,Ua])
-        self._Cirac_parameters = two_qubit_params
+        self.__Cirac_unitaries = tuple([Vb,Va,Ub,Ua])
+        self.__Cirac_parameters = [x if abs(x)>1e-12 else 0.0 for x in two_qubit_params]
 
     def reconstruct(self):
         """
         Return the expression of the unitary as a product of the decomposition.
         It is the inverse of the decomposition. Useful for testing.
         """
-        unitaries = self._Cirac_unitaries
-        params = self._Cirac_parameters
+        unitaries = self.Cirac_unitaries
+        params = self.Cirac_parameters
         basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
         W4 = (-0.5j*sum([x*y for x,y in zip(params,basis)])).expm()
         _reconstruct = qp.tensor([unitaries[1],unitaries[0]])

@@ -2,7 +2,7 @@
 Author: Tiago Batalhão
 
 This file contains code to implement a 2-qubit unitary operator
-according to the method of # XXX:
+according to the method of PRA 63, 062309:
 """
 
 import pylab as py
@@ -10,6 +10,7 @@ import qutip as qp
 import cmath
 import scipy.optimize
 from EquivalenceClasses import equivalence_partition
+import random
 
 class TwoQubitOperation():
     """
@@ -22,8 +23,7 @@ class TwoQubitOperation():
         Decompose the unitary according to the method in PRA 63, 062309.
         """
         # Step (i)
-        utu = calculate_UtU(self.unitary)
-        egvals, entangled_A = find_entangled_basis(utu)
+        egvals, entangled_A = find_entangled_basis_magical(self.unitary)
         epsilons = [0.5*(cmath.phase(x)%(2*py.pi)) for x in egvals]
         # Step (ii)
         Va, Vb, xis = finding_local_unitaries(entangled_A)
@@ -49,17 +49,20 @@ class TwoQubitOperation():
         _reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * _reconstruct
         return _reconstruct
 
-def calculate_UtU(operator):
+def find_entangled_basis_magical(operator):
     """
-    Calcutate U^T U, where U is the transpose of U
+    Find a basis formed from maximally-entangled elements
+    of the operator U^T U, where U is the transpose of U
     in the magical basis.
     """
-    operator = qp.Qobj(operator)
+    operator = qp.Qobj(operator, dims=[[2,2],[2,2]])
     operator_magical = convert_to_magicalbasis(operator)
     transpose = operator_magical.full().T
     transpose = qp.Qobj(transpose,dims=operator.dims)
     utu = (transpose * operator_magical)
-    return convert_from_magicalbasis(utu)
+    egvals, entangled = utu.eigenstates()
+    entangled = [convert_from_magicalbasis(x) for x in entangled]
+    return egvals, entangled
 
 def convert_to_magicalbasis(operator):
     """
@@ -182,70 +185,3 @@ def make_vector_real(vector):
     phase = phases[0]
     vector = vector * py.exp(-1j*phase)
     return vector, phase
-
-
-def find_entangled_basis(operator):
-    """
-    Find an entangled basis for a given operator.
-    Must deal with degenerate subspaces.
-    """
-    eigenvals, eigenvecs = operator.eigenstates()
-
-    # Find the degenerate eigenspaces
-    threshold = 1e-10
-    degenerate = equivalence_partition(eigenvals, lambda x,y: abs(x-y)<threshold)
-    subspaces = [(x,[]) for x in degenerate[0]]
-    for key, value in degenerate[1].items():
-        subspaces[value][1].append(eigenvecs[key])
-
-    eigenvalues, eigenvectors = [], []
-    for subspace in subspaces:
-        basis = find_entangled_elements(sum(qp.ket2dm(x) for x in subspace[1]))
-        for ket in basis:
-            eigenvalues.append(subspace[0])
-            eigenvectors.append(ket)
-
-    # QUICK TEST (ERASE):
-    reconstruct = sum(x*qp.ket2dm(y) for x,y in zip(eigenvalues,eigenvectors))
-    from test_VartanWilliamsDecomposition import unitary_equivalence
-    test = unitary_equivalence(reconstruct, operator)
-    assert test, u"Failure at find_entangled_basis"
-
-    print(eigenvectors)
-
-    return eigenvalues, eigenvectors
-
-
-def find_entangled_elements(projector):
-    """
-    From a list of vectors, find a basis to the spanned space
-    formed by maximally-entangled states.
-    """
-    basis = [y for x,y in zip(*projector.eigenstates()) if abs(x)>1e-4]
-    print(len(basis))
-    if len(basis) < 2:
-        return basis
-    else:
-        def attempt(params):
-            params_real = params[:len(basis)]
-            params_imag = params[len(basis):]
-            ket = sum((x+1j*y)*z for x,y,z in zip(params_real, params_imag, basis))
-            rho = qp.ket2dm(ket)
-            normalization = rho.tr()
-            ket = ket / py.sqrt(normalization)
-            rho = qp.ket2dm(ket)
-            return ket, rho
-        def function_to_minimize(params):
-            ket, rho = attempt(params)
-            rho_A = qp.ptrace(rho,[0])
-            metric = - min(rho_A.eigenenergies())
-            return metric
-        initial_attempt = [0]*(2*len(basis))
-        optimal = scipy.optimize.fmin(function_to_minimize, initial_attempt)
-        optimal_ket, optimal_rho = attempt(optimal)
-        assert (projector * optimal_rho * projector - optimal_rho).norm() < 1e-4, u"rho is not in the subspace of projector"
-        projector_next = projector - optimal_rho
-        print(optimal_rho.eigenenergies())
-        print(projector.eigenenergies())
-        print(projector_next.eigenenergies())
-        return [optimal_ket] + find_entangled_elements(projector_next)

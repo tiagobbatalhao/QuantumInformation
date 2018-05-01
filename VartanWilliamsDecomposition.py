@@ -18,19 +18,33 @@ class TwoQubitOperation():
     It uses the qutip package.
     """
 
+    @property
+    def unitary(self):
+        return self.__unitary
+
+    @unitary.setter
+    def unitary(self, unitary):
+        if isinstance(unitary, list) or isinstance(unitary, tuple):
+            unitary = py.array(unitary)
+        if hasattr(unitary, 'shape') and unitary.shape == (4,4):
+            self.__unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
+        else:
+            raise ValueError(u"Property 'unitary' must be 4x4 matrix.")
+
     def decomposition_Cirac(self):
         """
         Decompose the unitary according to the method in PRA 63, 062309.
         """
         # Step (i)
-        egvals, entangled_A = find_entangled_basis_magical(self.unitary)
+        egvals, entangled_A, magical_A = find_entangled_basis_magical(self.unitary)
         epsilons = [0.5*(cmath.phase(x)%(2*py.pi)) for x in egvals]
         # Step (ii)
-        Va, Vb, xis = finding_local_unitaries(entangled_A)
+        Va, Vb, xis = finding_local_unitaries(magical_A)
         # Step (iii)
         entangled_B = [py.exp(-1j*epsilon)*self.unitary*ket for ket,epsilon in zip(entangled_A,epsilons)]
+        magical_B = [convert_to_magicalbasis(x) for x in entangled_B]
         # Step (iv)
-        Uad, Ubd, phases = finding_local_unitaries(entangled_B)
+        Uad, Ubd, phases = finding_local_unitaries(magical_B)
         Ua = Uad.dag()
         Ub = Ubd.dag()
         Udiag = qp.tensor([Uad,Ubd]) * self.unitary * qp.tensor([Va,Vb]).dag()
@@ -40,6 +54,10 @@ class TwoQubitOperation():
         self._Cirac_parameters = two_qubit_params
 
     def reconstruct(self):
+        """
+        Return the expression of the unitary as a product of the decomposition.
+        It is the inverse of the decomposition. Useful for testing.
+        """
         unitaries = self._Cirac_unitaries
         params = self._Cirac_parameters
         basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
@@ -60,9 +78,9 @@ def find_entangled_basis_magical(operator):
     transpose = operator_magical.full().T
     transpose = qp.Qobj(transpose,dims=operator.dims)
     utu = (transpose * operator_magical)
-    egvals, entangled = utu.eigenstates()
-    entangled = [convert_from_magicalbasis(x) for x in entangled]
-    return egvals, entangled
+    egvals, magical = utu.eigenstates()
+    entangled = [convert_from_magicalbasis(x) for x in magical]
+    return egvals, entangled, magical
 
 def convert_to_magicalbasis(operator):
     """
@@ -97,7 +115,7 @@ _magical_vectors = [
 _magical_basis = qp.Qobj(py.array(_magical_vectors).T/py.sqrt(2),dims=[[2,2],[2,2]])
 _magical_basis_dag = _magical_basis.dag()
 
-def finding_local_unitaries(entangled_basis):
+def finding_local_unitaries(in_magical_basis):
     """
     Find Va, Vb such that
         (Va \otimes Vb) \ket{\Psi_k} = \ket{\Phi_k}
@@ -106,18 +124,12 @@ def finding_local_unitaries(entangled_basis):
         \ket{\Phi_k} is an element of the magical basis
 
     Input:
-        entangled_basis: a basis with four maximally-entangled states
+        in_magical_basis: a basis with real vectors, representing
+            maximally-entangled states in the magical basis.
     """
 
-    # Convert the basis vectors so that they are real in the magical basis
-    real_vectors, phases = [],[]
-    for vector in entangled_basis:
-        real_vector,phase = make_vector_real(convert_to_magicalbasis(vector))
-        real_vectors.append(real_vector)
-        phases.append(phase)
-
-    ket_ef = convert_from_magicalbasis(real_vectors[0] + 1j * real_vectors[1]) / py.sqrt(2)
-    ket_epfp = convert_from_magicalbasis(real_vectors[0] - 1j * real_vectors[1]) / py.sqrt(2)
+    ket_ef = convert_from_magicalbasis(in_magical_basis[0] + 1j * in_magical_basis[1]) / py.sqrt(2)
+    ket_epfp = convert_from_magicalbasis(in_magical_basis[0] - 1j * in_magical_basis[1]) / py.sqrt(2)
 
     ket_e = qp.ptrace(ket_ef,[0]).eigenstates()[1][-1]
     ket_f = qp.ptrace(ket_ef,[1]).eigenstates()[1][-1]
@@ -133,7 +145,7 @@ def finding_local_unitaries(entangled_basis):
     # Now I must rewrite the Psi_bar states in this basis
     local_basis = [qp.tensor(x,y) for x in [ket_e,ket_ep] for y in [ket_f,ket_fp]]
     matrix_t = []
-    for base in real_vectors:
+    for base in in_magical_basis:
         base_comp = convert_from_magicalbasis(base)
         matrix_t.append([identity.matrix_element(x.dag(),base_comp) for x in local_basis])
     matrix = py.array(matrix_t).T
@@ -149,7 +161,8 @@ def finding_local_unitaries(entangled_basis):
     phases = []
     transform = qp.tensor([unitary_A,unitary_B])
     changed_order = [_magical_vectors[x] for x in [0,1,3,2]]
-    for vector,magical in zip(entangled_basis,changed_order):
+    entangled_basis = [convert_from_magicalbasis(x) for x in in_magical_basis]
+    for vector, magical in zip(entangled_basis, changed_order):
         magical_ket = qp.Qobj(py.array(magical).T,dims=[[2,2],[1,1]]) / py.sqrt(2)
         vec = transform * vector
         inner_product = identity.matrix_element(magical_ket.dag(),vec)
@@ -172,16 +185,3 @@ def get_alphabetagamma(operator):
     beta = qp.expect(hamiltonian, qp.tensor([qp.sigmax()]*2)) / 2.0
     gamma = qp.expect(hamiltonian, qp.tensor([qp.sigmay()]*2)) / 2.0
     return alpha, beta, gamma
-
-def make_vector_real(vector):
-    """
-    Extract a common complex factor from a vector.
-    """
-    threshold_A = 1e-6
-    phases = [cmath.phase(x)%py.pi for x in vector if abs(x)>threshold_A]
-    diff = py.diff(phases + phases[0:1])
-    threshold_B = 1e-2
-    assert min(abs(diff)) < threshold_B , u"Vector can not be made real"
-    phase = phases[0]
-    vector = vector * py.exp(-1j*phase)
-    return vector, phase

@@ -22,7 +22,7 @@ def unitary_equivalence(unitary_A, unitary_B):
 
 class test_TwoQubitOperation(unittest.TestCase):
 
-    def test_Cirac(self, n_tests = 1):
+    def test_Cirac(self, n_tests = 100):
         for i in range(n_tests):
             obj = TwoQubitOperation()
             unitary = qp.rand_unitary(4)

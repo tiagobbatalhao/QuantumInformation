@@ -223,9 +223,14 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
         old_tuple = correct_alphabetagamma(self.Cirac_parameters)
 
         implementations = []
-        for clifford_label, clifford_ops in correction_clifford.items():
-            for paulis_label, paulis_ops in correction_pauli_single.items():
-                for paulid_label, paulid_ops in correction_pauli_double.items():
+        clifford_order = ['ZXY', 'ZYX', 'XZY', 'XYZ', 'YZX', 'YXZ']
+        pauli_order = ['I', 'Z', 'X', 'Y']
+        for clifford_label in clifford_order:
+            clifford_ops = correction_clifford[clifford_label]
+            for paulis_label in pauli_order:
+                paulis_ops = correction_pauli_single[paulis_label]
+                for paulid_label in pauli_order:
+                    paulid_ops = correction_pauli_double[paulid_label]
                     new_tuple = apply_corrections(old_tuple, clifford_ops)
                     new_tuple = apply_corrections(new_tuple, paulis_ops)
                     new_tuple = apply_corrections(new_tuple, paulid_ops)

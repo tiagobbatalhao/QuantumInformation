@@ -5,7 +5,6 @@ import pylab as py
 import qutip as qp
 import cmath
 
-
 def unitary_equivalence(unitary_A, unitary_B):
     """
     Check if unitary_A and unitary_B are equivalent.
@@ -23,8 +22,8 @@ def unitary_equivalence(unitary_A, unitary_B):
 
 class test_TwoQubitOperation(unittest.TestCase):
 
-    @unittest.skip('Already done')
-    def test_Cirac(self, n_tests = 100):
+    # @unittest.skip('Already done')
+    def test_Cirac(self, n_tests = 1):
         for i in range(n_tests):
             obj = TwoQubitOperation()
             unitary = qp.rand_unitary(4)
@@ -42,7 +41,7 @@ class test_TwoQubitOperation(unittest.TestCase):
             with self.subTest(test = i):
                 self.assertTrue(thisCorrect)
 
-    @unittest.skip('Already done')
+    # @unittest.skip('Already done')
     def test_MBQC(self):
         cz = qp.Qobj(py.diag([1,1,1,-1]),dims=[[2,2],[2,2]])
         rotx = lambda x: qp.qeye(2)*py.cos(x/2) - 1j*qp.sigmax()*py.sin(x/2)
@@ -96,7 +95,6 @@ class test_TwoQubitOperation(unittest.TestCase):
         obj = TwoQubitOperation_Clifford(unitary)
         parameters = obj.Clifford_parameters[0][-1]
         test = True
-        print(parameters)
         test = test and (abs(parameters[0]) >= abs(parameters[1]))
         test = test and (abs(parameters[1]) >= abs(parameters[2]))
         test = test and (parameters[0] >= 0)

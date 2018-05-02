@@ -80,14 +80,28 @@ class test_TwoQubitOperation(unittest.TestCase):
                 for j in range(96):
                     reconstruct = obj.reconstruct(index = j)
                     thisCorrect = unitary_equivalence(qp.Qobj(reconstruct),obj.unitary)
+
+                    # Test ordering of first attempt
                     if thisCorrect:
                         correct += 1
                     else:
                         fail += 1
-                    print('Success: {:02d}\tFail: {:02d}'.format(correct,fail))
+                    # print('Success: {:02d}\tFail: {:02d}'.format(correct,fail))
                     with self.subTest(test = (done_tests,j)):
                         self.assertTrue(thisCorrect)
                 done_tests += 1
+
+    def test_Clifford_order(self):
+        unitary = qp.rand_unitary(4)
+        obj = TwoQubitOperation_Clifford(unitary)
+        parameters = obj.Clifford_parameters[0][-1]
+        test = True
+        print(parameters)
+        test = test and (abs(parameters[0]) >= abs(parameters[1]))
+        test = test and (abs(parameters[1]) >= abs(parameters[2]))
+        test = test and (parameters[0] >= 0)
+        test = test and (parameters[1] >= 0)
+        self.assertTrue(test)
 
 if __name__ == '__main__':
     unittest.main()

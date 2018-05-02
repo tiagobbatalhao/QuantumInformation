@@ -219,8 +219,9 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
         """
         super().decomposition()
 
-        old_tuple = self.Cirac_parameters
-        
+        # old_tuple = self.Cirac_parameters
+        old_tuple = correct_alphabetagamma(self.Cirac_parameters)
+
         implementations = []
         for clifford_label, clifford_ops in correction_clifford.items():
             for paulis_label, paulis_ops in correction_pauli_single.items():
@@ -244,6 +245,43 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
         _reconstruct = W4 * _reconstruct
         _reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * _reconstruct
         return _reconstruct
+
+
+def correct_alphabetagamma(Cirac_parameters):
+    """
+    Change the implementation so that the parameters alpha,beta,gamma
+    are in decreasing order of absolute value and
+    alpha and beta are positives.
+    """
+    new_tuple = list(Cirac_parameters)
+    new_tuple[-1] = list(new_tuple[-1])
+
+    # Put each element in the range (-pi/2, +pi/2)
+    indices = range(3)
+    sigmas = [qp.sigmaz(), qp.sigmax(), qp.sigmay()]
+    for index, sigma in zip(indices, sigmas):
+        correction = False
+        while new_tuple[-1][index] > +py.pi/2:
+            new_tuple[-1][index] -= py.pi
+            correction = not correction
+        while new_tuple[-1][index] <= -py.pi/2:
+            new_tuple[-1][index] += py.pi
+            correction = not correction
+        if correction:
+            new_tuple[0] = sigma * new_tuple[0]
+            new_tuple[1] = sigma * new_tuple[1]
+
+
+    order = sorted(enumerate(new_tuple[-1]), key=lambda x:-abs(x[1]))
+    pauli_basis = 'ZXY'
+    correction = ''.join(pauli_basis[x[0]] for x in order)
+    new_tuple = apply_corrections(new_tuple, correction_clifford[correction])
+    if new_tuple[-1][0] < 0:
+        new_tuple = apply_corrections(new_tuple, correction_pauli_single['X'])
+    if new_tuple[-1][1] < 0:
+        new_tuple = apply_corrections(new_tuple, correction_pauli_single['Z'])
+
+    return new_tuple
 
 def apply_corrections(original, corrections):
     """
@@ -293,12 +331,12 @@ def define_corrections():
         (qp.sigmax() + qp.sigmay()) / py.sqrt(2),
         lambda x: tuple([+x[0], +x[2], +x[1]])
     )
-    clifford['XYZ'] = (
+    clifford['YZX'] = (
         (+1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
         (+1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
         lambda x: tuple([+x[2], +x[0], +x[1]])
     )
-    clifford['YZX'] = (
+    clifford['XYZ'] = (
         (-1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
         (-1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
         lambda x: tuple([+x[1], +x[2], +x[0]])

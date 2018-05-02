@@ -31,16 +31,9 @@ class TwoQubitOperation():
             unitary = py.array(unitary)
         if hasattr(unitary, 'shape') and unitary.shape == (4,4):
             self.__unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
-            self.decomposition_Cirac()
+            self.decomposition()
         else:
             raise Exception("Property 'unitary' must be 4x4 matrix.")
-
-    @property
-    def Cirac_unitaries(self):
-        return self.__Cirac_unitaries
-    @Cirac_unitaries.setter
-    def Cirac_unitaries(self, value):
-        raise Exception("You can not assign to this property.")
 
     @property
     def Cirac_parameters(self):
@@ -49,7 +42,7 @@ class TwoQubitOperation():
     def Cirac_parameters(self, value):
         raise Exception("You can not assign to this property.")
 
-    def decomposition_Cirac(self):
+    def decomposition(self):
         """
         Decompose the unitary according to the method in PRA 63, 062309.
         """
@@ -68,16 +61,16 @@ class TwoQubitOperation():
         Udiag = qp.tensor([Uad,Ubd]) * self.unitary * qp.tensor([Va,Vb]).dag()
         two_qubit_params = list(get_alphabetagamma(Udiag))
 
-        self.__Cirac_unitaries = tuple([Vb,Va,Ub,Ua])
-        self.__Cirac_parameters = [x if abs(x)>1e-12 else 0.0 for x in two_qubit_params]
+        two_qubit_params = tuple(x if abs(x)>1e-12 else 0.0 for x in two_qubit_params)
+        self.__Cirac_parameters = tuple([Vb, Va, Ub, Ua, two_qubit_params])
 
     def reconstruct(self):
         """
         Return the expression of the unitary as a product of the decomposition.
         It is the inverse of the decomposition. Useful for testing.
         """
-        unitaries = self.Cirac_unitaries
-        params = self.Cirac_parameters
+        unitaries = self.Cirac_parameters[0:4]
+        params = self.Cirac_parameters[-1]
         basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
         W4 = (-0.5j*sum([x*y for x,y in zip(params,basis)])).expm()
         _reconstruct = qp.tensor([unitaries[1],unitaries[0]])
@@ -203,3 +196,160 @@ def get_alphabetagamma(operator):
     beta = qp.expect(hamiltonian, qp.tensor([qp.sigmax()]*2)) / 2.0
     gamma = qp.expect(hamiltonian, qp.tensor([qp.sigmay()]*2)) / 2.0
     return alpha, beta, gamma
+
+
+
+class TwoQubitOperation_Clifford(TwoQubitOperation):
+    """
+    This class will implement the different ways to perform a 2-qubit operation
+    according to Clifford corrections.
+    It uses the qutip package.
+    """
+
+    @property
+    def Clifford_parameters(self):
+        return self.__Clifford_parameters
+    @Clifford_parameters.setter
+    def Clifford_parameters(self, value):
+        raise Exception("You can not assign to this property.")
+
+    def decomposition(self):
+        """
+        Create 96 distinct ways of performing a 2-qubit operation.
+        """
+        super().decomposition()
+
+        old_tuple = self.Cirac_parameters
+        
+        implementations = []
+        for clifford_label, clifford_ops in correction_clifford.items():
+            for paulis_label, paulis_ops in correction_pauli_single.items():
+                for paulid_label, paulid_ops in correction_pauli_double.items():
+                    new_tuple = apply_corrections(old_tuple, clifford_ops)
+                    new_tuple = apply_corrections(new_tuple, paulis_ops)
+                    new_tuple = apply_corrections(new_tuple, paulid_ops)
+                    implementations.append(new_tuple)
+        self.__Clifford_parameters = tuple(implementations)
+
+    def reconstruct(self, index=0):
+        """
+        Return the expression of the unitary as a product of the decomposition.
+        Indexed by the Clifford correction
+        """
+        unitaries = self.Clifford_parameters[index][0:4]
+        params = self.Clifford_parameters[index][-1]
+        basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
+        W4 = (-0.5j*sum([x*y for x,y in zip(params,basis)])).expm()
+        _reconstruct = qp.tensor([unitaries[1],unitaries[0]])
+        _reconstruct = W4 * _reconstruct
+        _reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * _reconstruct
+        return _reconstruct
+
+def apply_corrections(original, corrections):
+    """
+    Apply a correction to the Cirac parameters
+    Input:
+        original: a 5-tuple. The first 4 are unitaries, the last is a tuple.
+        parameters: a 3-tuple. The first 2 are unitaries, the last is a function.
+
+    The correction is
+        V_0 = C_0 * U_0
+        V_1 = C_1 * U_1
+        V_2 = U_2 * C_0^d
+        V_3 = U_3 * C_1^d
+    """
+    new = []
+    new.append(corrections[0] * original[0])
+    new.append(corrections[1] * original[1])
+    new.append(original[2] * corrections[0].dag())
+    new.append(original[3] * corrections[1].dag())
+    new.append(tuple(corrections[2](original[4])))
+    return tuple(new)
+
+
+
+def define_corrections():
+    """
+    Define the Clifford corrections.
+    """
+    clifford = {}
+    clifford['ZXY'] = (
+        qp.qeye(2),
+        qp.qeye(2),
+        lambda x: tuple([+x[0], +x[1], +x[2]])
+    )
+    clifford['XZY'] = (
+        (qp.sigmaz() + qp.sigmax()) / py.sqrt(2),
+        (qp.sigmaz() + qp.sigmax()) / py.sqrt(2),
+        lambda x: tuple([+x[1], +x[0], +x[2]])
+    )
+    clifford['YXZ'] = (
+        (qp.sigmaz() + qp.sigmay()) / py.sqrt(2),
+        (qp.sigmaz() + qp.sigmay()) / py.sqrt(2),
+        lambda x: tuple([+x[2], +x[1], +x[0]])
+    )
+    clifford['ZYX'] = (
+        (qp.sigmax() + qp.sigmay()) / py.sqrt(2),
+        (qp.sigmax() + qp.sigmay()) / py.sqrt(2),
+        lambda x: tuple([+x[0], +x[2], +x[1]])
+    )
+    clifford['XYZ'] = (
+        (+1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
+        (+1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
+        lambda x: tuple([+x[2], +x[0], +x[1]])
+    )
+    clifford['YZX'] = (
+        (-1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
+        (-1j* qp.qeye(2) + qp.sigmaz() + qp.sigmax() + qp.sigmay()) / 2.,
+        lambda x: tuple([+x[1], +x[2], +x[0]])
+    )
+
+    pauli_double = {}
+    pauli_double['I'] = (
+        qp.qeye(2),
+        qp.qeye(2),
+        lambda x: tuple([+x[0], +x[1], +x[2]])
+    )
+    pauli_double['Z'] = (
+        qp.sigmaz(),
+        qp.sigmaz(),
+        lambda x: tuple([+x[0], +x[1], +x[2]])
+    )
+    pauli_double['X'] = (
+        qp.sigmax(),
+        qp.sigmax(),
+        lambda x: tuple([+x[0], +x[1], +x[2]])
+    )
+    pauli_double['Y'] = (
+        qp.sigmay(),
+        qp.sigmay(),
+        lambda x: tuple([+x[0], +x[1], +x[2]])
+    )
+
+    pauli_single = {}
+    pauli_single['I'] = (
+        qp.qeye(2),
+        qp.qeye(2),
+        lambda x: tuple([+x[0], +x[1], +x[2]])
+    )
+    pauli_single['Z'] = (
+        qp.qeye(2),
+        qp.sigmaz(),
+        lambda x: tuple([+x[0], -x[1], -x[2]])
+    )
+    pauli_single['X'] = (
+        qp.qeye(2),
+        qp.sigmax(),
+        lambda x: tuple([-x[0], +x[1], -x[2]])
+    )
+    pauli_single['Y'] = (
+        qp.qeye(2),
+        qp.sigmay(),
+        lambda x: tuple([-x[0], -x[1], +x[2]])
+    )
+
+    return clifford, pauli_single, pauli_double
+
+corrections = ['correction_clifford', 'correction_pauli_single', 'correction_pauli_double']
+if any(x not in locals() for x in corrections):
+    correction_clifford, correction_pauli_single, correction_pauli_double = define_corrections()

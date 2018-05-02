@@ -1,5 +1,6 @@
 import unittest
 from VartanWilliamsDecomposition import TwoQubitOperation
+from VartanWilliamsDecomposition import TwoQubitOperation_Clifford
 import pylab as py
 import qutip as qp
 import cmath
@@ -22,12 +23,13 @@ def unitary_equivalence(unitary_A, unitary_B):
 
 class test_TwoQubitOperation(unittest.TestCase):
 
+    @unittest.skip('Already done')
     def test_Cirac(self, n_tests = 100):
         for i in range(n_tests):
             obj = TwoQubitOperation()
             unitary = qp.rand_unitary(4)
             obj.unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
-            obj.decomposition_Cirac()
+            # obj.decomposition()
             # unitaries = obj._Cirac_unitaries
             # params = obj._Cirac_parameters
             # basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
@@ -40,7 +42,7 @@ class test_TwoQubitOperation(unittest.TestCase):
             with self.subTest(test = i):
                 self.assertTrue(thisCorrect)
 
-    # @unittest.skip('Not ready yet')
+    @unittest.skip('Already done')
     def test_MBQC(self):
         cz = qp.Qobj(py.diag([1,1,1,-1]),dims=[[2,2],[2,2]])
         rotx = lambda x: qp.qeye(2)*py.cos(x/2) - 1j*qp.sigmax()*py.sin(x/2)
@@ -50,7 +52,7 @@ class test_TwoQubitOperation(unittest.TestCase):
                 obj = TwoQubitOperation()
                 unitary = cz * qp.tensor([rotx(angle_top),rotx(angle_bot)]) * cz
                 obj.unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
-                obj.decomposition_Cirac()
+                # obj.decomposition()
                 # unitaries = obj._Cirac_unitaries
                 # params = obj._Cirac_parameters
                 # basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
@@ -63,6 +65,29 @@ class test_TwoQubitOperation(unittest.TestCase):
                 with self.subTest(test = (angle_top,angle_bot)):
                     self.assertTrue(thisCorrect)
 
+    def test_Clifford(self, n_tests = 1):
+        done_tests = 0
+        while done_tests < n_tests:
+            unitary = qp.rand_unitary(4)
+
+            # Check that Cirac decomposition works
+            cirac = TwoQubitOperation(unitary)
+            reconstruct = cirac.reconstruct()
+            thisCorrect = unitary_equivalence(qp.Qobj(reconstruct),cirac.unitary)
+            if thisCorrect:
+                obj = TwoQubitOperation_Clifford(unitary)
+                correct, fail = 0, 0
+                for j in range(96):
+                    reconstruct = obj.reconstruct(index = j)
+                    thisCorrect = unitary_equivalence(qp.Qobj(reconstruct),obj.unitary)
+                    if thisCorrect:
+                        correct += 1
+                    else:
+                        fail += 1
+                    print('Success: {:02d}\tFail: {:02d}'.format(correct,fail))
+                    with self.subTest(test = (done_tests,j)):
+                        self.assertTrue(thisCorrect)
+                done_tests += 1
 
 if __name__ == '__main__':
     unittest.main()

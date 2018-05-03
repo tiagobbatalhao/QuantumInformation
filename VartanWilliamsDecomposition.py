@@ -24,7 +24,8 @@ class TwoQubitOperation():
 
     @property
     def unitary(self):
-        return self.__unitary
+        return self.__unitary.full()
+
     @unitary.setter
     def unitary(self, unitary):
         if isinstance(unitary, list) or isinstance(unitary, tuple):
@@ -37,7 +38,12 @@ class TwoQubitOperation():
 
     @property
     def Cirac_parameters(self):
-        return self.__Cirac_parameters
+        parameters = []
+        for unitary in self.__Cirac_parameters[0:4]:
+            parameters.append(format_unitary_by_trace(unitary))
+        parameters.append(self.__Cirac_parameters[-1])
+        return tuple(parameters)
+
     @Cirac_parameters.setter
     def Cirac_parameters(self, value):
         raise Exception("You can not assign to this property.")
@@ -47,18 +53,19 @@ class TwoQubitOperation():
         Decompose the unitary according to the method in PRA 63, 062309.
         """
         # Step (i)
-        egvals, entangled_A, magical_A = find_entangled_basis_magical(self.unitary)
+        unitary = qp.Qobj(self.unitary, dims=[[2,2],[2,2]])
+        egvals, entangled_A, magical_A = find_entangled_basis_magical(unitary)
         epsilons = [0.5*(cmath.phase(x)%(2*py.pi)) for x in egvals]
         # Step (ii)
         Va, Vb, xis = finding_local_unitaries(magical_A)
         # Step (iii)
-        entangled_B = [py.exp(-1j*epsilon)*self.unitary*ket for ket,epsilon in zip(entangled_A,epsilons)]
+        entangled_B = [py.exp(-1j*epsilon)*unitary*ket for ket,epsilon in zip(entangled_A,epsilons)]
         magical_B = [convert_to_magicalbasis(x) for x in entangled_B]
         # Step (iv)
         Uad, Ubd, phases = finding_local_unitaries(magical_B)
         Ua = Uad.dag()
         Ub = Ubd.dag()
-        Udiag = qp.tensor([Uad,Ubd]) * self.unitary * qp.tensor([Va,Vb]).dag()
+        Udiag = qp.tensor([Uad,Ubd]) * unitary * qp.tensor([Va,Vb]).dag()
         two_qubit_params = list(get_alphabetagamma(Udiag))
 
         two_qubit_params = tuple(x if abs(x)>1e-12 else 0.0 for x in two_qubit_params)
@@ -69,14 +76,14 @@ class TwoQubitOperation():
         Return the expression of the unitary as a product of the decomposition.
         It is the inverse of the decomposition. Useful for testing.
         """
-        unitaries = self.Cirac_parameters[0:4]
+        unitaries = [qp.Qobj(x,dims=[[2],[2]]) for x in self.Cirac_parameters[0:4]]
         params = self.Cirac_parameters[-1]
         basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
         W4 = (-0.5j*sum([x*y for x,y in zip(params,basis)])).expm()
         _reconstruct = qp.tensor([unitaries[1],unitaries[0]])
         _reconstruct = W4 * _reconstruct
         _reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * _reconstruct
-        return _reconstruct
+        return _reconstruct.full()
 
 def find_entangled_basis_magical(operator):
     """
@@ -197,7 +204,46 @@ def get_alphabetagamma(operator):
     gamma = qp.expect(hamiltonian, qp.tensor([qp.sigmay()]*2)) / 2.0
     return alpha, beta, gamma
 
+def format_unitary_by_det(unitary):
+    """
+    Convert a single-qubit unitary to numpy array
+    with determinant +1 and imaginary trace.
+    """
+    matrix = unitary.tidyup()
+    determinant = py.det(matrix.full())
+    matrix = matrix / py.sqrt(determinant)
+    trace = py.trace(matrix.full())
+    if trace.real > +1e-12:
+        matrix = +1* matrix
+    elif trace.real < -1e-12:
+        matrix = -1 * matrix
+    elif trace.imag > +1e-12:
+        matrix = -1j * matrix
+    elif trace.imag < -1e-12:
+        matrix = +1j * matrix
+    return matrix.tidyup().full()
 
+def format_unitary_by_trace(unitary):
+    """
+    Convert a single-qubit unitary to numpy array
+    with determinant +1 and imaginary trace.
+    """
+    trace = py.trace(unitary.full())
+    if abs(trace) > 1e-12:
+        correction = py.exp(-1j* cmath.phase(trace))
+        matrix = correction * unitary
+    elif abs(unitary[0,0]) > 1e-12:
+        correction = py.exp(-1j* cmath.phase(unitary[0,0]))
+        matrix = -1j * correction * unitary
+    else:
+        phases = [
+            cmath.phase(unitary[0,1]),
+            cmath.phase(unitary[1,0]),
+        ]
+        mid_phase = sum(phases) / 2.0
+        correction = py.exp(-1j * mid_phase)
+        matrix = -1j * correction * unitary
+    return matrix.tidyup().full()
 
 class TwoQubitOperation_Clifford(TwoQubitOperation):
     """
@@ -208,7 +254,15 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
 
     @property
     def Clifford_parameters(self):
-        return self.__Clifford_parameters
+        implementations = []
+        for implementation in self.__Clifford_parameters:
+            parameters = []
+            for unitary in implementation[0:4]:
+                parameters.append(format_unitary_by_trace(unitary))
+            parameters.append(implementation[-1])
+            implementations.append(parameters)
+        return implementations
+
     @Clifford_parameters.setter
     def Clifford_parameters(self, value):
         raise Exception("You can not assign to this property.")
@@ -219,7 +273,6 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
         """
         super().decomposition()
 
-        # old_tuple = self.Cirac_parameters
         old_tuple = correct_alphabetagamma(self.Cirac_parameters)
 
         implementations = []
@@ -242,14 +295,14 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
         Return the expression of the unitary as a product of the decomposition.
         Indexed by the Clifford correction
         """
-        unitaries = self.Clifford_parameters[index][0:4]
+        unitaries = [qp.Qobj(x,dims=[[2],[2]]) for x in self.Clifford_parameters[index][0:4]]
         params = self.Clifford_parameters[index][-1]
         basis = [qp.tensor([eval('qp.sigma'+x+'()')]*2) for x in 'zxy']
         W4 = (-0.5j*sum([x*y for x,y in zip(params,basis)])).expm()
         _reconstruct = qp.tensor([unitaries[1],unitaries[0]])
         _reconstruct = W4 * _reconstruct
         _reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * _reconstruct
-        return _reconstruct
+        return _reconstruct.full()
 
 
 def correct_alphabetagamma(Cirac_parameters):
@@ -258,8 +311,8 @@ def correct_alphabetagamma(Cirac_parameters):
     are in decreasing order of absolute value and
     alpha and beta are positives.
     """
-    new_tuple = list(Cirac_parameters)
-    new_tuple[-1] = list(new_tuple[-1])
+    new_tuple = [qp.Qobj(x,dims=[[2],[2]]) for x in Cirac_parameters[:4]]
+    new_tuple.append(list(Cirac_parameters[-1]))
 
     # Put each element in the range (-pi/2, +pi/2)
     indices = range(3)

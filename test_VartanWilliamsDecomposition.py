@@ -11,7 +11,7 @@ def unitary_equivalence(unitary_A, unitary_B):
     """
     threshold = 1e-4
     thisCorrect = True
-    should_be_identity = unitary_A.dag() * unitary_B
+    should_be_identity = qp.Qobj(unitary_A).dag() * qp.Qobj(unitary_B)
     eigs = should_be_identity.eigenenergies() * (1+0j)
     eigs*= py.exp(-1j*cmath.phase(eigs[0]))
     for eig in eigs:
@@ -25,9 +25,9 @@ class test_TwoQubitOperation(unittest.TestCase):
     # @unittest.skip('Already done')
     def test_Cirac(self, n_tests = 1):
         for i in range(n_tests):
-            obj = TwoQubitOperation()
-            unitary = qp.rand_unitary(4)
-            obj.unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
+            unitary = qp.rand_unitary(4).full()
+            obj = TwoQubitOperation(unitary)
+            # obj.unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
             # obj.decomposition()
             # unitaries = obj._Cirac_unitaries
             # params = obj._Cirac_parameters
@@ -37,7 +37,7 @@ class test_TwoQubitOperation(unittest.TestCase):
             # reconstruct = W4 * reconstruct
             # reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * reconstruct
             reconstruct = obj.reconstruct()
-            thisCorrect = unitary_equivalence(qp.Qobj(reconstruct),obj.unitary)
+            thisCorrect = unitary_equivalence(reconstruct,unitary)
             with self.subTest(test = i):
                 self.assertTrue(thisCorrect)
 
@@ -50,7 +50,8 @@ class test_TwoQubitOperation(unittest.TestCase):
             for angle_bot in angles:
                 obj = TwoQubitOperation()
                 unitary = cz * qp.tensor([rotx(angle_top),rotx(angle_bot)]) * cz
-                obj.unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
+                # obj.unitary = qp.Qobj(unitary, dims=[[2,2],[2,2]])
+                obj.unitary = unitary.full()
                 # obj.decomposition()
                 # unitaries = obj._Cirac_unitaries
                 # params = obj._Cirac_parameters
@@ -60,25 +61,26 @@ class test_TwoQubitOperation(unittest.TestCase):
                 # reconstruct = W4 * reconstruct
                 # reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * reconstruct
                 reconstruct = obj.reconstruct()
-                thisCorrect = unitary_equivalence(qp.Qobj(reconstruct),obj.unitary)
+                thisCorrect = unitary_equivalence(reconstruct,unitary.full())
                 with self.subTest(test = (angle_top,angle_bot)):
                     self.assertTrue(thisCorrect)
 
+    # @unittest.skip('Already done')
     def test_Clifford(self, n_tests = 1):
         done_tests = 0
         while done_tests < n_tests:
-            unitary = qp.rand_unitary(4)
+            unitary = qp.rand_unitary(4).full()
 
             # Check that Cirac decomposition works
             cirac = TwoQubitOperation(unitary)
             reconstruct = cirac.reconstruct()
-            thisCorrect = unitary_equivalence(qp.Qobj(reconstruct),cirac.unitary)
+            thisCorrect = unitary_equivalence(reconstruct,cirac.unitary)
             if thisCorrect:
                 obj = TwoQubitOperation_Clifford(unitary)
                 correct, fail = 0, 0
                 for j in range(96):
                     reconstruct = obj.reconstruct(index = j)
-                    thisCorrect = unitary_equivalence(qp.Qobj(reconstruct),obj.unitary)
+                    thisCorrect = unitary_equivalence(reconstruct,obj.unitary)
 
                     # Test ordering of first attempt
                     if thisCorrect:
@@ -90,6 +92,7 @@ class test_TwoQubitOperation(unittest.TestCase):
                         self.assertTrue(thisCorrect)
                 done_tests += 1
 
+    # @unittest.skip('Already done')
     def test_Clifford_order(self):
         unitary = qp.rand_unitary(4)
         obj = TwoQubitOperation_Clifford(unitary)

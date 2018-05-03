@@ -1,0 +1,12 @@
+*.lyx*
+*.pyc*
+*DS_Store*
+*.bib*
+*.aux*
+*.log*
+*.key*
+*.ai*
+*.csv*
+*.pickle*
+*synctex*
+*.ipynb_checkpoints*

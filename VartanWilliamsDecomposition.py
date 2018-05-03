@@ -24,7 +24,7 @@ class TwoQubitOperation():
 
     @property
     def unitary(self):
-        return self.__unitary.full()
+        return py.matrix(self.__unitary.full())
 
     @unitary.setter
     def unitary(self, unitary):
@@ -83,7 +83,18 @@ class TwoQubitOperation():
         _reconstruct = qp.tensor([unitaries[1],unitaries[0]])
         _reconstruct = W4 * _reconstruct
         _reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * _reconstruct
-        return _reconstruct.full()
+        return py.matrix(_reconstruct.full())
+
+    def phase_correction(self):
+        """
+        Return the extra phase of the original unitary.
+            U = e^{i*phase} * R
+        where U is the unitary and R is the given reconstruction.
+        """
+        should_be_identity = py.dot(self.reconstruct().H, self.unitary)
+        eigs = py.eigvals(should_be_identity)
+        phase = cmath.phase(eigs[0])
+        return phase
 
 def find_entangled_basis_magical(operator):
     """
@@ -221,7 +232,7 @@ def format_unitary_by_det(unitary):
         matrix = -1j * matrix
     elif trace.imag < -1e-12:
         matrix = +1j * matrix
-    return matrix.tidyup().full()
+    return py.matrix(matrix.tidyup().full())
 
 def format_unitary_by_trace(unitary):
     """
@@ -243,7 +254,7 @@ def format_unitary_by_trace(unitary):
         mid_phase = sum(phases) / 2.0
         correction = py.exp(-1j * mid_phase)
         matrix = -1j * correction * unitary
-    return matrix.tidyup().full()
+    return py.matrix(matrix.tidyup().full())
 
 class TwoQubitOperation_Clifford(TwoQubitOperation):
     """
@@ -293,7 +304,7 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
     def reconstruct(self, index=0):
         """
         Return the expression of the unitary as a product of the decomposition.
-        Indexed by the Clifford correction
+        Indexed by the Clifford correction.
         """
         unitaries = [qp.Qobj(x,dims=[[2],[2]]) for x in self.Clifford_parameters[index][0:4]]
         params = self.Clifford_parameters[index][-1]
@@ -302,7 +313,19 @@ class TwoQubitOperation_Clifford(TwoQubitOperation):
         _reconstruct = qp.tensor([unitaries[1],unitaries[0]])
         _reconstruct = W4 * _reconstruct
         _reconstruct = qp.tensor([unitaries[3],unitaries[2]]) * _reconstruct
-        return _reconstruct.full()
+        return py.matrix(_reconstruct.full())
+
+    def phase_correction(self, index=0):
+        """
+        Return the extra phase of the original unitary.
+            U = e^{i*phase} * R
+        where U is the unitary and R is the given reconstruction.
+        Indexed by the Clifford correction.
+        """
+        should_be_identity = py.dot(self.reconstruct(index).H, self.unitary)
+        eigs = py.eigvals(should_be_identity)
+        phase = cmath.phase(eigs[0])
+        return phase
 
 
 def correct_alphabetagamma(Cirac_parameters):
